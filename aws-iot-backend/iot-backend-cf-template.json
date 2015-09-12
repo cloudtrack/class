@@ -1,0 +1,516 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates the backend resources for the IoT loft series Connected device. NOTE: To delete this stack, prior to deletion via the CloudFormation console, refer to the S3BucketCleanUpCommand output command. Deletion will fail until the S3 bucket is empty.",
+
+    "Parameters": {
+        "DeviceID": {
+            "Type": "String",
+            "AllowedPattern": "[a-z0-9]{5,10}",
+            "Description": "The name of your device to reference in your code. This will identify your device in the visualization website."
+        },
+        "DeviceType": {
+            "Description": "Device type for HackDay event.",
+            "Default": "edison",
+            "Type": "String",
+            "AllowedValues": ["edison", "mediatek"],
+            "ConstraintDescription": "You must specify the device type."
+        }
+    },
+    "Resources": {
+        "DeviceBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "WebsiteConfiguration": {
+                    "IndexDocument": "index.html"
+                }
+            }
+        },
+        "DeviceStream": {
+            "Type": "AWS::Kinesis::Stream",
+            "Properties": {
+                "ShardCount": 1
+            }
+        },
+        "DeviceDataTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "AttributeDefinitions": [{
+                    "AttributeName": "device_id",
+                    "AttributeType": "S"
+                }, {
+                    "AttributeName": "time",
+                    "AttributeType": "N"
+                }],
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": "5",
+                    "WriteCapacityUnits": "5"
+                },
+                "KeySchema": [{
+                    "AttributeName": "device_id",
+                    "KeyType": "HASH"
+                }, {
+                    "AttributeName": "time",
+                    "KeyType": "RANGE"
+                }]
+            }
+        },
+        "DeviceSNSTopic": {
+            "Type": "AWS::SNS::Topic"
+        },
+        "DeviceUser": {
+            "Type": "AWS::IAM::User",
+            "Properties": {
+                "Path": {
+                    "Fn::Join": ["", ["/", {
+                        "Ref": "AWS::StackName"
+                    }, "/"]]
+                }
+            }
+        },
+        "DeviceGroup": {
+            "Type": "AWS::IAM::Group",
+            "Properties": {
+                "Path": {
+                    "Fn::Join": ["", ["/", {
+                        "Ref": "AWS::StackName"
+                    }, "/"]]
+                }
+            }
+        },
+        "UserGroupAddition": {
+            "Type": "AWS::IAM::UserToGroupAddition",
+            "Properties": {
+                "GroupName": {
+                    "Ref": "DeviceGroup"
+                },
+                "Users": [{
+                    "Ref": "DeviceUser"
+                }]
+            }
+        },
+        "DeviceUserAccessKey": {
+            "Type": "AWS::IAM::AccessKey",
+            "Properties": {
+                "Status": "Active",
+                "UserName": {
+                    "Ref": "DeviceUser"
+                }
+            }
+        },
+        "DeviceExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "Path": {
+                    "Fn::Join": ["", ["/", {
+                        "Ref": "AWS::StackName"
+                    }, "/"]]
+                },
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": ["lambda.amazonaws.com", "ec2.amazonaws.com"]
+                        },
+                        "Action": ["sts:AssumeRole"]
+                    }]
+                }
+            }
+        },
+        "CustomResourceCreationRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "Path": {
+                    "Fn::Join": ["", ["/", {
+                        "Ref": "AWS::StackName"
+                    }, "/"]]
+                },
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Sid": "",
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": ["lambda.amazonaws.com"]
+                        },
+                        "Action": ["sts:AssumeRole"]
+                    }]
+                }
+            }
+        },
+        "CustomResourceCreationPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-customresourcecreationpolicy",
+                "Roles": [{
+                    "Ref": "CustomResourceCreationRole"
+                }],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Action": [
+                            "logs:*"
+                        ],
+                        "Resource": "arn:aws:logs:*:*:*"
+                    }, {
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3:*"
+                        ],
+                        "Resource": "*"
+                    }, {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:*"
+                        ],
+                        "Resource": "*"
+                    }, {
+                        "Effect": "Allow",
+                        "Action": [
+                            "CloudFormation:*"
+                        ],
+                        "Resource": "*"
+                    }]
+                }
+            }
+        },
+        "LambdaLogPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-lambdalogpolicy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Action": [
+                            "logs:*"
+                        ],
+                        "Resource": "arn:aws:logs:*:*:*"
+                    }]
+                }
+            }
+        },
+        "LambdaInvocationPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-lambdainvocationpolicy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction"
+                        ],
+                        "Resource": "*"
+                    }]
+                }
+            }
+        },
+        "S3Policy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-s3policy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "Groups": [{
+                    "Ref": "DeviceGroup"
+                }],
+                "PolicyDocument": {
+                    "Statement": [{
+                        "Resource": {
+                            "Fn::Join": ["", ["arn:aws:s3:::", {
+                                "Ref": "DeviceBucket"
+                            }, "*"]]
+                        },
+                        "Action": [
+                            "s3:ListBucket",
+                            "s3:Put*",
+                            "s3:Get*",
+                            "s3:*MultipartUpload*",
+                            "s3:DeleteObject*"
+                        ],
+                        "Sid": "1",
+                        "Effect": "Allow"
+                    }, {
+                        "Resource": ["arn:aws:s3:::*"],
+                        "Action": ["s3:ListAllMyBuckets", "s3:GetBucketLocation"],
+                        "Sid": "2",
+                        "Effect": "Allow"
+                    }]
+                }
+            }
+        },
+        "DynamoPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-ddbpolicy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "Groups": [{
+                    "Ref": "DeviceGroup"
+                }],
+                "PolicyDocument": {
+                    "Statement": [{
+                        "Resource": [{
+                            "Fn::Join": ["", ["arn:aws:dynamodb:", {
+                                "Ref": "AWS::Region"
+                            }, ":", {
+                                "Ref": "AWS::AccountId"
+                            }, ":table/", {
+                                "Ref": "DeviceDataTable"
+                            }, "*"]]
+                        }],
+                        "Action": [
+                            "dynamodb:BatchGetItem",
+                            "dynamodb:BatchWriteItem",
+                            "dynamodb:Query",
+                            "dynamodb:PutItem",
+                            "dynamodb:GetItem",
+                            "dynamodb:Scan",
+                            "dynamodb:UpdateItem"
+                        ],
+                        "Sid": "1",
+                        "Effect": "Allow"
+                    }, {
+                        "Resource": "*",
+                        "Action": [
+                            "dynamodb:DescribeTable",
+                            "dynamodb:ListTables",
+                            "dynamodb:CreateTable",
+                            "cloudwatch:*"
+                        ],
+                        "Sid": "2",
+                        "Effect": "Allow"
+                    }]
+                }
+            }
+        },
+        "VisualizationPolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "Path": {
+                    "Fn::Join": ["", ["/", {
+                        "Ref": "AWS::StackName"
+                    }, "/"]]
+                },
+                "PolicyDocument": {
+                    "Version":"2012-10-17",
+                    "Statement": [{
+                        "Resource": [{
+                            "Fn::Join": ["", ["arn:aws:dynamodb:", {
+                                "Ref": "AWS::Region"
+                            }, ":", {
+                                "Ref": "AWS::AccountId"
+                            }, ":table/", {
+                                "Ref": "DeviceDataTable"
+                            }, "*"]]
+                        }],
+                        "Action": [
+                            "dynamodb:BatchGetItem",
+                            "dynamodb:DescribeTable",
+                            "dynamodb:ListTables",
+                            "dynamodb:Query",
+                            "dynamodb:GetItem",
+                            "dynamodb:Scan"
+
+                        ],
+                        "Sid": "1",
+                        "Effect": "Allow"
+                    }, {
+                        "Sid": "2",
+                        "Effect": "Allow",
+                        "Action": [
+                            "mobileanalytics:PutEvents",
+                            "cognito-sync:*"
+                        ],
+                        "Resource": [
+                            "*"
+                        ]
+
+                    }]
+                }
+            }
+        },
+        "KinesisPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-kinesispolicy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "Groups": [{
+                    "Ref": "DeviceGroup"
+                }],
+                "PolicyDocument": {
+                    "Statement": [{
+                        "Resource": [{
+                            "Fn::Join": ["", ["arn:aws:kinesis:", {
+                                "Ref": "AWS::Region"
+                            }, ":", {
+                                "Ref": "AWS::AccountId"
+                            }, ":stream/", {
+                                "Ref": "DeviceStream"
+                            }]]
+                        }],
+                        "Action": [
+                            "kinesis:PutRecord",
+                            "kinesis:GetShardIterator",
+                            "kinesis:GetRecords",
+                            "kinesis:DescribeStream"
+                        ],
+                        "Sid": "1",
+                        "Effect": "Allow"
+                    }]
+                }
+            }
+        },
+        "SNSPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "iot-hackseries-aws-loft-snspolicy",
+                "Roles": [{
+                    "Ref": "DeviceExecutionRole"
+                }],
+                "Groups": [{
+                    "Ref": "DeviceGroup"
+                }],
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{
+                        "Sid": "1",
+                        "Effect": "Allow",
+                        "Action": [
+                            "sns:ConfirmSubscription",
+                            "sns:CreatePlatformApplication",
+                            "sns:CreatePlatformEndpoint",
+                            "sns:CreateTopic",
+                            "sns:DeleteEndpoint",
+                            "sns:DeletePlatformApplication",
+                            "sns:GetEndpointAttributes",
+                            "sns:GetPlatformApplicationAttributes",
+                            "sns:GetSubscriptionAttributes",
+                            "sns:GetTopicAttributes",
+                            "sns:ListEndpointsByPlatformApplication",
+                            "sns:ListPlatformApplications",
+                            "sns:ListSubscriptions",
+                            "sns:ListSubscriptionsByTopic",
+                            "sns:ListTopics",
+                            "sns:Publish",
+                            "sns:SetEndpointAttributes",
+                            "sns:SetPlatformApplicationAttributes",
+                            "sns:SetSubscriptionAttributes",
+                            "sns:SetTopicAttributes",
+                            "sns:Subscribe",
+                            "sns:Unsubscribe"
+                        ],
+                        "Resource": [{
+                            "Ref": "DeviceSNSTopic"
+                        }]
+                    }]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "StreamName": {
+            "Value": {
+                "Ref": "DeviceStream"
+            }
+        },
+        "StreamArn": {
+            "Value": {
+                "Fn::Join": ["", ["arn:aws:kinesis:", {
+                    "Ref": "AWS::Region"
+                }, ":", {
+                    "Ref": "AWS::AccountId"
+                }, ":stream/", {
+                    "Ref": "DeviceStream"
+                }]]
+            }
+        },
+        "DynamoRegion": {
+            "Value": {
+                "Ref": "AWS::Region"
+            }
+        },
+        "DynamoEndPoint": {
+            "Value": {
+                "Fn::Join": ["", [
+                    "https://dynamodb.", {
+                        "Ref": "AWS::Region"
+                    },
+                    ".amazonaws.com"
+                ]]
+            }
+        },
+        "RoleArn": {
+            "Value": {
+                "Fn::GetAtt": ["DeviceExecutionRole", "Arn"]
+            }
+        },
+        "AccountId": {
+            "Value": {
+                "Ref": "AWS::AccountId"
+            }
+        },
+        "DeviceTableName": {
+            "Value": {
+                "Ref": "DeviceDataTable"
+            }
+        },
+        "BucketName": {
+            "Value": {
+                "Ref": "DeviceBucket"
+            }
+        },
+        "SNSTopicArn": {
+            "Value": {
+                "Ref": "DeviceSNSTopic"
+            }
+        },
+        "AccessKey": {
+            "Value": {
+                "Ref": "DeviceUserAccessKey"
+            }
+        },
+        "SecretKey": {
+            "Value": {
+                "Fn::GetAtt": ["DeviceUserAccessKey", "SecretAccessKey"]
+            }
+        },
+        "VisualizationDashboardURL": {
+            "Value": {
+                "Fn::Join": [
+                    "", [
+                        "https://", {
+                            "Ref": "DeviceBucket"
+                        },
+                        ".s3.amazonaws.com/dashboard/index.html#/teams/", {
+                            "Ref": "DeviceID"
+                        }
+                    ]
+                ]
+            },
+            "Description": "URL for connected generic device dashboard"
+        },
+        "S3BucketCleanUpCommand": {
+            "Value": {
+                "Fn::Join": ["", [
+                    "aws s3 rm s3://", {
+                        "Ref": "DeviceBucket"
+                    }, " --recursive"
+                ]]
+            },
+            "Description": "This stack cannot be deleted until the S3 bucket created has been emptied. To do so, run this command from the Worker Instance. Another option is to delete the data via the S3 console."
+        }
+    }
+}
