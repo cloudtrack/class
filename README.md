@@ -2,9 +2,7 @@
 This class aims for students to learn AWS based cloud computing technology and use them for their projects. 
 
 ## Class Description
-* Time: 1:00-6:00 pm on Friday, 2015
-* Venue: 302-208, Seoul National University 
-* Teacher: Channy Yun (channy@snu.ac.kr)
+* Project Mentor: Channy Yun (channy@snu.ac.kr)
 * http://meslab.snu.ac.kr/courses/2015f/project/ 
 * 
 ## Schedule 
