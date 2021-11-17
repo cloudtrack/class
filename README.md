@@ -3,11 +3,12 @@ This class aims for students to learn AWS based cloud computing technology and u
 
 ## Class Description
 * Project Mentor: Channy Yun (channy@snu.ac.kr)
-* http://meslab.snu.ac.kr/courses/2015f/project/ 
-* http://meslab.snu.ac.kr/courses/2016s/project/
-* http://meslab.snu.ac.kr/courses/2016f/project/
-* http://meslab.snu.ac.kr/courses/2017s/project/
-* http://meslab.snu.ac.kr/courses/2017f/project/
+* http://dcslab.snu.ac.kr/courses/2015f/project/ 
+* http://dcslab.snu.ac.kr/courses/2016s/project/
+* http://dcslab.snu.ac.kr/courses/2016f/project/
+* http://dcslab.snu.ac.kr/courses/2017s/project/
+* http://dcslab.snu.ac.kr/courses/2017f/project/
+* http://dcslab.snu.ac.kr/courses/2021f/project/
 
 ## Schedule 
 * 1 week: Introduction of projects based on AWS
